@@ -1,0 +1,14 @@
+# Elixir build artifacts
+/_build/
+/deps/
+/doc/
+
+# Erlang artifacts
+*.beam
+*.dump
+
+# Environment files
+.env
+
+# OS
+.DS_Store
