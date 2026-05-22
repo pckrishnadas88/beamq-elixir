@@ -8,6 +8,7 @@ defmodule Beamq.Supervisor do
   def init(_) do
     children = [
       Beamq.Store,
+      {Task.Supervisor, name: Beamq.WorkerSupervisor},
       Beamq.Scheduler
     ]
 

@@ -20,21 +20,43 @@ defmodule Beamq.Store do
     {:ok, %{}}
   end
 
+  def mark_completed(id) do
+    GenServer.call(__MODULE__, {:update_status, id, :completed})
+  end
+
+  def mark_failed(id) do
+    GenServer.call(__MODULE__, {:update_status, id, :failed})
+  end
+
   def handle_call({:add, job}, _from, state) do
     id = :erlang.unique_integer([:monotonic])
-    :ets.insert(@table, {id, job})
+    job_record = %{id: id, payload: job, status: :ready, attempts: 0}
+    :ets.insert(@table, {id, job_record})
     {:reply, :ok, state}
   end
 
   def handle_call(:get, _from, state) do
-    case :ets.first(@table) do
+    # Find the first :ready job using an ETS match specification
+    match_spec = [{{:"$1", %{status: :ready}}, [], [:"$_"]}]
+    case :ets.select(@table, match_spec, 1) do
+      {[{id, job_record}], _continuation} ->
+        # Transition state to running instead of deleting
+        running_job = %{job_record | status: :running, attempts: job_record.attempts + 1}
+        :ets.insert(@table, {id, running_job})
+        {:reply, running_job, state}
+
       :"$end_of_table" ->
         {:reply, :empty, state}
+    end
+  end
 
-      id ->
-        [{^id, job}] = :ets.lookup(@table, id)
-        :ets.delete(@table, id)
-        {:reply, job, state}
+  def handle_call({:update_status, id, new_status}, _from, state) do
+    case :ets.lookup(@table, id) do
+      [{^id, job_record}] ->
+        :ets.insert(@table, {id, %{job_record | status: new_status}})
+        {:reply, :ok, state}
+      [] ->
+        {:reply, {:error, :not_found}, state}
     end
   end
 end
